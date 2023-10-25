@@ -3,7 +3,6 @@ package com.michaelflisar.composedebugdrawer.demo
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -21,20 +20,30 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.michaelflisar.composedebugdrawer.buildinfos.BuildConfig
-import com.michaelflisar.composedebugdrawer.core.*
+import com.michaelflisar.composedebugdrawer.scopeExperiment.buildinfos.DebugDrawerBuildInfos
 import com.michaelflisar.composedebugdrawer.demo.classes.DemoLogging
 import com.michaelflisar.composedebugdrawer.demo.classes.DemoPrefs
-import com.michaelflisar.composedebugdrawer.buildinfos.DebugDrawerBuildInfos
-import com.michaelflisar.composedebugdrawer.deviceinfos.DebugDrawerDeviceInfos
-import com.michaelflisar.composedebugdrawer.plugin.lumberjack.DebugDrawerLumberjack
-import com.michaelflisar.composedebugdrawer.plugin.kotpreferences.DebugDrawerSettingCheckbox
-import com.michaelflisar.composedebugdrawer.plugin.kotpreferences.DebugDrawerSettingDropdown
-import com.michaelflisar.composedebugdrawer.plugin.kotpreferences.DebugDrawerSettingSegmentedButtons
-import com.michaelflisar.kotpreferences.compose.collectAsState
+import com.michaelflisar.composedebugdrawer.scopeExperiment.deviceinfos.DebugDrawerDeviceInfos
+import com.michaelflisar.composedebugdrawer.plugin.scopeExperiment.kotpreferences.DebugDrawerSettingCheckbox
+import com.michaelflisar.composedebugdrawer.plugin.scopeExperiment.kotpreferences.DebugDrawerSettingDropdown
+import com.michaelflisar.composedebugdrawer.plugin.scopeExperiment.kotpreferences.DebugDrawerSettingSegmentedButtons
+import com.michaelflisar.composedebugdrawer.plugin.scopeExperiment.lumberjack.DebugDrawerLumberjack
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerActions
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerWithScope
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerButton
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerCheckbox
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerDivider
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerDropdownNormal
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerInfo
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerLazyListScope
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerRegion
+import com.michaelflisar.composedebugdrawer.scopeExperiment.LazyDebugDrawerRegion
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerSegmentedButtons
+import com.michaelflisar.composedebugdrawer.scopeExperiment.rememberDebugDrawerScope
 import com.michaelflisar.kotpreferences.compose.collectAsStateNotNull
 import com.michaelflisar.lumberjack.L
 import com.michaelflisar.testcompose.ui.theme.ComposeDialogDemoTheme
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -63,33 +72,21 @@ class DemoActivity : ComponentActivity() {
             val expandSingleOnly = DemoPrefs.expandSingleOnly.collectAsStateNotNull()
 
             val scope = rememberCoroutineScope()
-            val drawerState = rememberDebugDrawerState(
-                // all optional
-                DrawerValue.Closed,
-                expandSingleOnly = expandSingleOnly.value,
-                confirmStateChange = { true },
-                initialExpandedIds = emptyList()
-            )
-
-            BackHandler(drawerState.drawerState.isOpen) {
-                // we handle the back press if debug drawer is open and close it
-                scope.launch {
-                    drawerState.drawerState.close()
-                }
-            }
 
             ComposeDialogDemoTheme(
                 darkTheme = theme.isDark(),
                 dynamicColor = dynamicTheme
             ) {
-                DebugDrawer(
-                    enabled = BuildConfig.DEBUG, // if disabled the drawer will not be created at all, in this case inside a release build... could be a (hidden) setting inside your normal settings or whereever you want...
-                    drawerState = drawerState,
+                // only necessary to access the drawer from Content()
+
+                val debugDrawerScopeState = rememberDebugDrawerScope()
+                DebugDrawerWithScope(
+                    enabled = true, // if disabled the drawer will not be created at all, in this case inside a release build... could be a (hidden) setting inside your normal settings or whereever you want...
                     drawerContent = {
-                        Drawer(drawerState)
+                        Drawer()
                     },
                     content = {
-                        Content(drawerState)
+                        Content(debugDrawerScopeState.drawerState)
                     }
                 )
             }
@@ -100,9 +97,9 @@ class DemoActivity : ComponentActivity() {
     // UI - Content and Drawer
     // ----------------
 
-    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    private fun Content(drawerState: DebugDrawerState) {
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun Content(drawerState: DrawerState) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -135,7 +132,7 @@ class DemoActivity : ComponentActivity() {
                         )
                         OutlinedButton(onClick = {
                             scope.launch {
-                                drawerState.drawerState.open()
+                                drawerState.open()
                             }
                         }) {
                             Text("Open Debug Drawer")
@@ -147,50 +144,43 @@ class DemoActivity : ComponentActivity() {
         }
     }
 
-    @Composable
-    private fun Drawer(
-        drawerState: DebugDrawerState
-    ) {
-        val scope = rememberCoroutineScope()
-
+    private fun DebugDrawerLazyListScope.Drawer() {
         DebugDrawerCheckbox(
             label = "Expand Single Only",
             description = "This flag is used by this debug drawer!",
             checked = DemoPrefs.expandSingleOnly.value
         ) {
-            scope.launch(Dispatchers.IO) {
+            CoroutineScope(Dispatchers.IO).launch {
                 DemoPrefs.expandSingleOnly.update(it)
             }
         }
 
         // 1) Build Infos
-        DebugDrawerBuildInfos(drawerState = drawerState, collapsible = true) {
-            // optional additional debug drawer entries...
+        DebugDrawerBuildInfos(collapsible = true) {
+//             optional additional debug drawer entries...
             DebugDrawerInfo(title = "Author", info = "MF")
         }
 
         // 2) Custom Module
-        DebugDrawerAppTheme(drawerState = drawerState)
+        DebugDrawerAppTheme()
 
         // 3) Debug Drawer Actions
-        DebugDrawerActions(drawerState = drawerState)
+        DebugDrawerActions()
 
         // 4) Device Infos
-        DebugDrawerDeviceInfos(drawerState = drawerState)
+        DebugDrawerDeviceInfos()
 
         // 5) Lumberjack plugin
         DebugDrawerLumberjack(
-            drawerState = drawerState,
             setup = DemoLogging.fileLoggingSetup,
             mailReceiver = "feedback@gmail.com"
         )
 
         // 6) Example of use with MaterialPreferences and automatic label deduction from properties
         // currently enum based lists + boolean basec checkboxes are supported
-        DebugDrawerRegion(
+        LazyDebugDrawerRegion(
             icon = Icons.Default.ColorLens,
-            label = "Demo Preferences",
-            drawerState = drawerState
+            label = "Demo Preferences"
         ) {
             DebugDrawerDivider(info = "Boolean")
             DebugDrawerSettingCheckbox(setting = DemoPrefs.devBoolean1)
@@ -208,13 +198,12 @@ class DemoActivity : ComponentActivity() {
         }
 
         // 7) Example of manual checkboxes, buttons, segmentedbuttons, info texts
-        DebugDrawerRegion(
+        LazyDebugDrawerRegion(
             icon = Icons.Default.Info,
             label = "Manual",
             description = "With some description...",
-            drawerState = drawerState
         ) {
-            var test1 by remember { mutableStateOf(false) }
+            var test1 by mutableStateOf(false)
             DebugDrawerCheckbox(
                 label = "Checkbox",
                 description = "Some debug flag",
@@ -236,7 +225,7 @@ class DemoActivity : ComponentActivity() {
             }
             DebugDrawerInfo(title = "Custom Info", info = "Value of custom info...")
 
-            val level = remember { mutableStateOf("L1") }
+            val level = mutableStateOf("L1")
             DebugDrawerSegmentedButtons(selected = level, items = listOf("L1", "L2", "L3"))
         }
 
@@ -244,10 +233,9 @@ class DemoActivity : ComponentActivity() {
         DebugDrawerRegion(
             icon = Icons.Outlined.Info,
             label = "Custom Layouts",
-            drawerState = drawerState
         ) {
 
-            // 2 Buttons in 1 Row
+//             2 Buttons in 1 Row
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -269,7 +257,7 @@ class DemoActivity : ComponentActivity() {
                 }
             }
 
-            // 2 Dropdowns in 1 row
+//             2 Dropdowns in 1 row
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -277,7 +265,7 @@ class DemoActivity : ComponentActivity() {
                 val items = listOf("Entry 1", "Entry 2", "Entry 3")
                 var test1 by remember { mutableStateOf(items[0]) }
                 var test2 by remember { mutableStateOf(items[1]) }
-                DebugDrawerDropdown(
+                DebugDrawerDropdownNormal(
                     modifier = modifier,
                     label = "Test1",
                     selected = test1,
@@ -285,7 +273,7 @@ class DemoActivity : ComponentActivity() {
                 ) {
                     test1 = it
                 }
-                DebugDrawerDropdown(
+                DebugDrawerDropdownNormal(
                     modifier = modifier,
                     label = "Test2",
                     selected = test2,

@@ -1,28 +1,22 @@
-package com.michaelflisar.composedebugdrawer.buildinfos
+package com.michaelflisar.composedebugdrawer.scopeExperiment.buildinfos
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import com.michaelflisar.composedebugdrawer.core.DebugDrawerDefaults
-import com.michaelflisar.composedebugdrawer.core.DebugDrawerInfo
-import com.michaelflisar.composedebugdrawer.core.DebugDrawerRegion
-import com.michaelflisar.composedebugdrawer.core.DebugDrawerState
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerInfo
+import com.michaelflisar.composedebugdrawer.scopeExperiment.DebugDrawerLazyListScope
+import com.michaelflisar.composedebugdrawer.scopeExperiment.LazyDebugDrawerRegion
 
-@Composable
-fun DebugDrawerBuildInfos(
+fun DebugDrawerLazyListScope.DebugDrawerBuildInfos(
     icon: ImageVector? = null,
-    drawerState: DebugDrawerState,
     label: String = "Information",
     id: String = label,
     collapsible: Boolean = true,
-    content: @Composable ColumnScope.() -> Unit = {}
-) {
-    val context = LocalContext.current
+    content: DebugDrawerLazyListScope.() -> Unit = {}
+)  {
     val packageName = context.packageName
 
     var info: PackageInfo? = null
@@ -51,12 +45,11 @@ fun DebugDrawerBuildInfos(
     } else DebugDrawerDefaults.FALSE
     val debug = DebugDrawerDefaults.TRUE
 
-    DebugDrawerRegion(
+    LazyDebugDrawerRegion(
         icon = icon,
         label = label,
         id = id,
         collapsible = collapsible,
-        drawerState = drawerState
     ) {
         DebugDrawerInfo(title = "Version Code", info = version)
         DebugDrawerInfo(title = "Version Name", info = versionName)
